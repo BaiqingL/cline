@@ -210,6 +210,19 @@ Usage:
 </arguments>
 </use_mcp_tool>
 
+## code_merge
+Description: Request to merge code with edit instructions using local Ollama AI. Use this when you need to apply complex edit patterns to code that follow the "// ... existing code ..." format. This tool is particularly useful for applying multiple edits to a single file in a structured way.
+Parameters:
+- original_code: (required) The original code that needs to be modified
+- edit_snippet: (required) The edit instructions in the format with '// ... existing code ...' markers indicating where changes should be applied
+Usage:
+<code_merge>
+<original_code>Your original code here</original_code>
+<edit_snippet>// ... existing code ...
+NEW_CODE_SECTION
+// ... existing code ...</edit_snippet>
+</code_merge>
+
 ## access_mcp_resource
 Description: Request to access a resource provided by a connected MCP server. Resources represent data sources that can be used as context, such as files, API responses, or system information.
 Parameters:

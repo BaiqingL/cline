@@ -41,6 +41,7 @@ import os from "os"
 import * as path from "path"
 import { serializeError } from "serialize-error"
 import * as vscode from "vscode"
+import { Ollama } from "ollama"
 import { ToolResponse, USE_EXPERIMENTAL_CLAUDE4_FEATURES } from "."
 import { ToolParamName, ToolUse, ToolUseName } from "../assistant-message"
 import { constructNewFileContent } from "../assistant-message/diff"
@@ -68,6 +69,67 @@ export class ToolExecutor {
 		autoApproveActionpath: string | undefined,
 	): Promise<boolean> {
 		return this.autoApprover.shouldAutoApproveToolWithPath(blockname, autoApproveActionpath)
+	}
+
+	/**
+	 * Performs code merging using the local Ollama endpoint
+	 */
+	private async performCodeMerge(originalCode: string, editSnippet: string): Promise<string> {
+		const ollama = new Ollama({ host: 'http://localhost:11434' })
+
+		const systemPrompt = `You are a helpful assistant for a code editor that applies an edit to code to merge them together. That is, you will be given code wrapper in <code> tags and an edit wrapped in <edit> tags, and you will apply the edit to the code.
+
+For example:
+
+<code>
+CODE_SNIPPET
+</code>
+
+<edit>
+EDIT_SNIPPET
+</edit>
+
+The code is any type of code and the edit is in the form of:
+
+// ... existing code ...
+FIRST_EDIT
+// ... existing code ...
+SECOND_EDIT
+// ... existing code ...
+THIRD_EDIT
+// ... existing code ...
+
+The merged code must be exact with no room for any errors. Make sure all whitespaces are preserved correctly. A small typo in code will cause it to fail to compile or error out, leading to poor user experience.
+
+Output the code wrapped in <code> tags.`
+
+		const userPrompt = `<code>
+${originalCode}
+</code>
+
+<edit>
+${editSnippet}
+</edit>`
+
+		try {
+			const response = await ollama.generate({
+				model: "Osmosis/Osmosis-Apply-1.7B",
+				prompt: userPrompt,
+				system: systemPrompt,
+				stream: false,
+			})
+
+			// Extract code from <code> tags
+			const codeMatch = response.response.match(/<code>([\s\S]*?)<\/code>/i)
+			if (codeMatch && codeMatch[1]) {
+				return codeMatch[1].trim()
+			} else {
+				// If no code tags found, return the full response as fallback
+				return response.response.trim()
+			}
+		} catch (error) {
+			throw new Error(`Failed to merge code with Ollama: ${error instanceof Error ? error.message : String(error)}`)
+		}
 	}
 
 	constructor(
@@ -190,8 +252,10 @@ export class ToolExecutor {
 				return `[${block.name}]`
 			case "new_rule":
 				return `[${block.name} for '${block.params.path}']`
-			case "web_fetch":
-				return `[${block.name} for '${block.params.url}']`
+					case "web_fetch":
+			return `[${block.name} for '${block.params.url}']`
+		case "code_merge":
+			return `[${block.name} for code merging]`
 		}
 	}
 
@@ -2085,6 +2149,78 @@ export class ToolExecutor {
 				} catch (error) {
 					await this.urlContentFetcher.closeBrowser() // Ensure browser is closed on error
 					await this.handleError("fetching web content", error, block)
+					await this.saveCheckpoint()
+					break
+				}
+			}
+			case "code_merge": {
+				const originalCode: string | undefined = block.params.original_code
+				const editSnippet: string | undefined = block.params.edit_snippet
+				const sharedMessageProps = {
+					tool: "codeMerge",
+					originalCode: this.removeClosingTag(block, "original_code", originalCode),
+					editSnippet: this.removeClosingTag(block, "edit_snippet", editSnippet),
+				}
+
+				try {
+					if (block.partial) {
+						const partialMessage = JSON.stringify({
+							...sharedMessageProps,
+							result: "Processing code merge...",
+						})
+						
+						if (this.shouldAutoApproveTool(block.name)) {
+							this.removeLastPartialMessageIfExistsWithType("ask", "tool")
+							await this.say("tool", partialMessage, undefined, undefined, block.partial)
+						} else {
+							this.removeLastPartialMessageIfExistsWithType("say", "tool")
+							await this.ask("tool", partialMessage, block.partial).catch(() => {})
+						}
+						break
+					}
+
+					// Validate required parameters
+					if (!originalCode) {
+						this.taskState.consecutiveMistakeCount++
+						this.pushToolResult(await this.sayAndCreateMissingParamError("code_merge", "original_code"), block)
+						await this.saveCheckpoint()
+						break
+					}
+					if (!editSnippet) {
+						this.taskState.consecutiveMistakeCount++
+						this.pushToolResult(await this.sayAndCreateMissingParamError("code_merge", "edit_snippet"), block)
+						await this.saveCheckpoint()
+						break
+					}
+
+					this.taskState.consecutiveMistakeCount = 0
+
+					// Perform the code merge using Ollama
+					const mergedCode = await this.performCodeMerge(originalCode, editSnippet)
+
+					const completeMessage = JSON.stringify({
+						...sharedMessageProps,
+						result: mergedCode,
+					})
+
+					if (this.shouldAutoApproveTool(block.name)) {
+						this.removeLastPartialMessageIfExistsWithType("ask", "tool")
+						await this.say("tool", completeMessage, undefined, undefined, false)
+						this.taskState.consecutiveAutoApprovedRequestsCount++
+					} else {
+						const didApprove = await this.askApproval("tool", block, completeMessage)
+						if (!didApprove) {
+							await this.saveCheckpoint()
+							break
+						}
+					}
+
+					this.pushToolResult(mergedCode, block)
+					await this.saveCheckpoint()
+					break
+
+				} catch (error) {
+					await this.handleError("merging code with Ollama", error, block)
 					await this.saveCheckpoint()
 					break
 				}

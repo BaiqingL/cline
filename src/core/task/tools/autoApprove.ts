@@ -40,6 +40,8 @@ export class AutoApprove {
 					return this.autoApprovalSettings.actions.useBrowser
 				case "web_fetch":
 					return this.autoApprovalSettings.actions.useBrowser
+				case "code_merge":
+					return this.autoApprovalSettings.actions.editFiles
 				case "access_mcp_resource":
 				case "use_mcp_tool":
 					return this.autoApprovalSettings.actions.useMcp

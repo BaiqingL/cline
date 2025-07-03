@@ -212,6 +212,19 @@ Usage:
 <uri>resource URI here</uri>
 </access_mcp_resource>
 
+## code_merge
+Description: Request to merge code with edit instructions using local Ollama AI. Use this when you need to apply complex edit patterns to code that follow the "// ... existing code ..." format. This tool is particularly useful for applying multiple edits to a single file in a structured way.
+Parameters:
+- original_code: (required) The original code that needs to be modified
+- edit_snippet: (required) The edit instructions in the format with '// ... existing code ...' markers indicating where changes should be applied
+Usage:
+<code_merge>
+<original_code>Your original code here</original_code>
+<edit_snippet>// ... existing code ...
+NEW_CODE_SECTION
+// ... existing code ...</edit_snippet>
+</code_merge>
+
 ## search_files
 Description: Request to perform a regex search across files in a specified directory, providing context-rich results. This tool searches for patterns or specific content across multiple files, displaying each match with encapsulating context. IMPORTANT NOTE: Use this tool sparingly, and opt to explore the codebase using the \`list_files\` and \`read_file\` tools instead.
 Parameters:

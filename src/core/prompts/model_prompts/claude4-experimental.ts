@@ -25,6 +25,7 @@ import { attemptCompletionToolDefinition } from "@core/tools/attemptCompletionTo
 import { browserActionToolDefinition } from "@core/tools/browserActionTool"
 import { newTaskToolDefinition } from "@core/tools/newTaskTool"
 import { editToolDefinition } from "@/core/tools/editTool"
+import { codeMergeToolDefinition } from "@core/tools/codeMergeTool"
 
 export const SYSTEM_PROMPT_CLAUDE4_EXPERIMENTAL = async (
 	cwd: string,
@@ -41,6 +42,7 @@ export const SYSTEM_PROMPT_CLAUDE4_EXPERIMENTAL = async (
 		accessMcpResourceToolDefinition.name,
 	)
 	const browserActionTool = browserActionToolDefinition(browserSettings)
+	const codeMergeTool = codeMergeToolDefinition()
 
 	const systemPrompt = `You are Cline, a highly skilled software engineer with extensive knowledge in many programming languages, frameworks, design patterns, and best practices.
 
@@ -338,6 +340,7 @@ You accomplish a given task iteratively, breaking it down into clear steps and w
 		loadMcpDocumentationTool,
 		newTaskToolDefinition,
 		editToolDefinition,
+		codeMergeTool,
 	]
 	if (supportsBrowserUse) {
 		tools.push(browserActionTool)
